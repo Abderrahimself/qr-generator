@@ -8,11 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import engine
-from app.repositories.cache_repo import ValkeyCacheRepository
-from app.repositories.metadata_repo import PostgresMetadataRepository
-from app.repositories.storage_repo import GarageStorageRepository, create_s3_client
+from app.repositories.storage_repo import create_s3_client
 from app.routes import health, qr
-from app.services.qr_service import QRService
 
 logger = logging.getLogger(__name__)
 

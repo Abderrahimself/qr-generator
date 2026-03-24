@@ -1,3 +1,5 @@
+import asyncio
+
 import boto3
 from botocore.config import Config
 
@@ -11,7 +13,8 @@ class GarageStorageRepository(StorageRepository):
         self.bucket = settings.s3_bucket_name
 
     async def upload(self, key: str, data: bytes, content_type: str) -> None:
-        self.client.put_object(
+        await asyncio.to_thread(
+            self.client.put_object,
             Bucket=self.bucket,
             Key=key,
             Body=data,
@@ -19,14 +22,19 @@ class GarageStorageRepository(StorageRepository):
         )
 
     async def get_presigned_url(self, key: str, expires_in: int = 3600) -> str:
-        return self.client.generate_presigned_url(
+        return await asyncio.to_thread(
+            self.client.generate_presigned_url,
             "get_object",
             Params={"Bucket": self.bucket, "Key": key},
             ExpiresIn=expires_in,
         )
 
     async def delete(self, key: str) -> None:
-        self.client.delete_object(Bucket=self.bucket, Key=key)
+        await asyncio.to_thread(
+            self.client.delete_object,
+            Bucket=self.bucket,
+            Key=key,
+        )
 
 
 def create_s3_client():
