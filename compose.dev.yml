@@ -1,0 +1,57 @@
+# compose.dev.yml — Infrastructure services for local development
+# Start with: podman compose -f compose.dev.yml up -d
+# Stop with:  podman compose -f compose.dev.yml down
+# Reset data: podman compose -f compose.dev.yml down -v
+
+services:
+  postgres:
+    image: docker.io/library/postgres:16-alpine
+    container_name: qr-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: qr_generator
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  valkey:
+    image: docker.io/valkey/valkey:8-alpine
+    container_name: qr-valkey
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkeydata:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  garage:
+    image: docker.io/dxflrs/garage:v1.0.1
+    container_name: qr-garage
+    ports:
+      - "3900:3900"   # S3 API
+      - "3902:3902"   # Admin API
+    volumes:
+      - ./garage/garage.toml:/etc/garage.toml:ro,z
+      - garagedata:/var/lib/garage/data
+      - garagemeta:/var/lib/garage/meta
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3903/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  valkeydata:
+  garagedata:
+  garagemeta:
