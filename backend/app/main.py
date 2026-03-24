@@ -2,21 +2,45 @@ import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 
+import redis.asyncio as redis
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.database import engine
+from app.repositories.cache_repo import ValkeyCacheRepository
+from app.repositories.metadata_repo import PostgresMetadataRepository
+from app.repositories.storage_repo import GarageStorageRepository, create_s3_client
 from app.routes import health, qr
+from app.services.qr_service import QRService
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    # Startup: initialize connections (Phase 2 will wire real implementations)
+    # Startup
     logger.info("Starting QR Generator API")
+
+    # Valkey connection
+    valkey_client = redis.Redis(
+        host=settings.valkey_host,
+        port=settings.valkey_port,
+        decode_responses=False,
+    )
+
+    # S3 client for Garage
+    s3_client = create_s3_client()
+
+    # Store clients on app state for access in dependencies
+    app.state.valkey_client = valkey_client
+    app.state.s3_client = s3_client
+
     yield
-    # Shutdown: close connections
+
+    # Shutdown
+    await valkey_client.aclose()
+    await engine.dispose()
     logger.info("Shutting down QR Generator API")
 
 

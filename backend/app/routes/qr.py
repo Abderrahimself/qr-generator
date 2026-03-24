@@ -1,17 +1,26 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database import get_session
+from app.repositories.cache_repo import ValkeyCacheRepository
+from app.repositories.metadata_repo import PostgresMetadataRepository
+from app.repositories.storage_repo import GarageStorageRepository
 from app.schemas.qr import QRCodeRequest, QRCodeResponse
 from app.services.qr_service import QRService
 
 router = APIRouter(prefix="/api")
 
 
-def get_qr_service() -> QRService:
-    raise NotImplementedError(
-        "QRService dependency must be overridden at app startup"
-    )
+async def get_qr_service(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> QRService:
+    cache = ValkeyCacheRepository(request.app.state.valkey_client)
+    metadata = PostgresMetadataRepository(session)
+    storage = GarageStorageRepository(request.app.state.s3_client)
+    return QRService(cache=cache, metadata=metadata, storage=storage)
 
 
 @router.post("/generate", response_model=QRCodeResponse, status_code=201)

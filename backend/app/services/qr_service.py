@@ -39,7 +39,7 @@ class QRService:
         image_data = generator.generate(url)
 
         # 3. Upload to object storage
-        object_key = f"qr-codes/{url_hash}.{format}"
+        object_key = f"{url_hash}.{format}"
         await self.storage.upload(object_key, image_data, generator.content_type)
 
         # 4. Save metadata
