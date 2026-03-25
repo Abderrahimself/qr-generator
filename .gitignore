@@ -2,6 +2,7 @@
 .env
 garage/garage.toml
 CLAUDE.md
+APPLICATION_STATE.md
 
 # Python
 __pycache__/

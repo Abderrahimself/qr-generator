@@ -45,7 +45,7 @@ services:
       - garagedata:/var/lib/garage/data
       - garagemeta:/var/lib/garage/meta
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3903/health"]
+      test: ["CMD", "/garage", "status"]
       interval: 10s
       timeout: 5s
       retries: 5
