@@ -29,10 +29,15 @@ class Settings(BaseSettings):
 
     # Garage (S3-compatible)
     s3_endpoint_url: str
+    s3_public_url: str = ""   # Public-facing URL for presigned URLs (defaults to s3_endpoint_url)
     s3_access_key: str
     s3_secret_key: str
     s3_bucket_name: str = "qr-codes"
     s3_region: str = "garage"
+
+    @property
+    def s3_presign_url(self) -> str:
+        return self.s3_public_url or self.s3_endpoint_url
 
     # QR defaults
     qr_default_format: str = "png"

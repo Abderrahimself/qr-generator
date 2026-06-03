@@ -19,7 +19,7 @@ async def get_qr_service(
 ) -> QRService:
     cache = ValkeyCacheRepository(request.app.state.valkey_client)
     metadata = PostgresMetadataRepository(session)
-    storage = GarageStorageRepository(request.app.state.s3_client)
+    storage = GarageStorageRepository(request.app.state.s3_client, request.app.state.presign_client)
     return QRService(cache=cache, metadata=metadata, storage=storage)
 
 

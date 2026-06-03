@@ -8,8 +8,9 @@ from app.repositories.interfaces import StorageRepository
 
 
 class GarageStorageRepository(StorageRepository):
-    def __init__(self, s3_client) -> None:
+    def __init__(self, s3_client, presign_client) -> None:
         self.client = s3_client
+        self.presign_client = presign_client
         self.bucket = settings.s3_bucket_name
 
     async def upload(self, key: str, data: bytes, content_type: str) -> None:
@@ -23,7 +24,7 @@ class GarageStorageRepository(StorageRepository):
 
     async def get_presigned_url(self, key: str, expires_in: int = 3600) -> str:
         return await asyncio.to_thread(
-            self.client.generate_presigned_url,
+            self.presign_client.generate_presigned_url,
             "get_object",
             Params={"Bucket": self.bucket, "Key": key},
             ExpiresIn=expires_in,
@@ -41,6 +42,22 @@ def create_s3_client():
     return boto3.client(
         "s3",
         endpoint_url=settings.s3_endpoint_url,
+        aws_access_key_id=settings.s3_access_key,
+        aws_secret_access_key=settings.s3_secret_key,
+        region_name=settings.s3_region,
+        config=Config(signature_version="s3v4"),
+    )
+
+
+def create_presign_client():
+    """Separate client using the public-facing URL for presigned URL generation.
+    In containerised deployments S3_ENDPOINT_URL points to the internal service
+    name (e.g. http://garage:3900) while S3_PUBLIC_URL points to the host-
+    accessible address (e.g. http://localhost:3900).
+    """
+    return boto3.client(
+        "s3",
+        endpoint_url=settings.s3_presign_url,
         aws_access_key_id=settings.s3_access_key,
         aws_secret_access_key=settings.s3_secret_key,
         region_name=settings.s3_region,
