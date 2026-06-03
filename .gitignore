@@ -1,8 +1,10 @@
 # Environment and secrets
 .env
 garage/garage.toml
+# Supervisor / planning docs — local guidance, kept out of the repo
 CLAUDE.md
 APPLICATION_STATE.md
+DEVOPS.md
 
 # Python
 __pycache__/
