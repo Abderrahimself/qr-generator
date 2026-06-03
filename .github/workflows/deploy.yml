@@ -1,0 +1,95 @@
+name: Build & Publish
+
+# Builds the backend and frontend images, scans them with Trivy, and — only if
+# the scan passes — publishes them to GitHub Container Registry (GHCR).
+#
+# The SSH deploy / health-check / auto-rollback half of the pipeline is
+# intentionally deferred to Phase 5.11, once a target VM exists (Phases 5.4–5.6).
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  images:
+    name: Build, scan & push (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            context: ./backend
+            dockerfile: ./backend/Dockerfile
+          - name: frontend
+            context: .
+            dockerfile: ./frontend/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute lowercase image name
+        id: img
+        # GHCR requires lowercase image paths; repository owners may use capitals.
+        run: echo "name=${REGISTRY,,}/${REPO,,}/${COMPONENT,,}" >> "$GITHUB_OUTPUT"
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          REPO: ${{ github.repository }}
+          COMPONENT: ${{ matrix.name }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Image metadata (tags & labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.img.outputs.name }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+
+      - name: Build image (load locally for scanning)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy scan (block on fixable HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.img.outputs.name }}:${{ steps.meta.outputs.version }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image (cache reused — no rebuild)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
