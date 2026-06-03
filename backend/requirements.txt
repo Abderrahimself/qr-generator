@@ -12,3 +12,5 @@ uvicorn[standard]
 httpx
 pytest
 pytest-asyncio
+structlog
+prometheus-fastapi-instrumentator
