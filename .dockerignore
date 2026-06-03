@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.env
+**/garage/garage.toml
+**/.git
+**/.venv
+**/tests
+CLAUDE.md
+DEVOPS.md
+APPLICATION_STATE.md

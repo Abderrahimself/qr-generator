@@ -1,0 +1,95 @@
+# compose.yml — Full production stack
+# Start with: podman compose -f compose.yml up --build
+# Stop with:  podman compose -f compose.yml down
+# Reset data: podman compose -f compose.yml down -v
+#
+# Requires .env at project root with S3_ACCESS_KEY and S3_SECRET_KEY set.
+
+services:
+  postgres:
+    image: docker.io/library/postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: qr_generator
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  valkey:
+    image: docker.io/valkey/valkey:8-alpine
+    volumes:
+      - valkeydata:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  garage:
+    image: docker.io/dxflrs/garage:v1.0.1
+    ports:
+      - "3900:3900"   # S3 API (exposed so Garage CLI can be run from host)
+      - "3902:3902"   # Admin API
+    volumes:
+      - ./garage/garage.toml:/etc/garage.toml:ro,z
+      - garagedata:/var/lib/garage/data
+      - garagemeta:/var/lib/garage/meta
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/qr_generator
+      VALKEY_HOST: valkey
+      VALKEY_PORT: 6379
+      CACHE_TTL_SECONDS: 86400
+      S3_ENDPOINT_URL: http://garage:3900
+      S3_PUBLIC_URL: http://localhost:3900
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET_NAME: qr-codes
+      S3_REGION: garage
+      # Frontend is published on host port 8080 (rootless Podman cannot bind
+      # privileged port 80 without adjusting ip_unprivileged_port_start).
+      # API calls are same-origin via nginx, so CORS is not exercised in this
+      # stack, but keep the origin consistent with the published port.
+      CORS_ORIGINS: http://localhost:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      garage:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  valkeydata:
+  garagedata:
+  garagemeta:
