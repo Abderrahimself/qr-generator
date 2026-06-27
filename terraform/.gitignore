@@ -1,0 +1,14 @@
+# Terraform local state, caches, and crash logs — never commit these.
+.terraform/
+.terraform.tfstate.lock.info
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Variable files may contain secrets; commit *.tfvars.example instead.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# Keep the provider lock file (.terraform.lock.hcl) committed for reproducible builds.

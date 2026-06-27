@@ -1,0 +1,10 @@
+#cloud-config
+hostname: ${hostname}
+preserve_hostname: false
+manage_etc_hosts: true
+
+# Key auth only; the key is added to the cloud image's default user (passwordless
+# sudo is already configured there). Ansible connects here and creates the deploy user.
+ssh_pwauth: false
+ssh_authorized_keys:
+  - ${ssh_pubkey}

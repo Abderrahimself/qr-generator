@@ -1,0 +1,24 @@
+[Unit]
+Description=Allow libvirt VM traffic through Docker's DOCKER-USER filter chain
+Documentation=https://docs.docker.com/network/packet-filtering-firewalls/
+# DOCKER-USER is created by Docker, and Docker flushes it on (re)start.
+# Run after Docker so the chain exists, and re-run whenever Docker restarts
+# (PartOf) so our rules are reinstated instead of silently dropped.
+After=docker.service
+Wants=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Allow forwarding for ANY libvirt bridge (virbr*). This covers every libvirt
+# network — current and future (Vagrant, Terraform, the default net) — with no
+# per-subnet maintenance. VM egress is allowed; inbound is limited to
+# established/related (return) traffic. Docker's own isolation is untouched.
+ExecStart=/usr/sbin/iptables -I DOCKER-USER -i virbr+ -j ACCEPT
+ExecStart=/usr/sbin/iptables -I DOCKER-USER -o virbr+ -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+ExecStop=-/usr/sbin/iptables -D DOCKER-USER -i virbr+ -j ACCEPT
+ExecStop=-/usr/sbin/iptables -D DOCKER-USER -o virbr+ -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+[Install]
+WantedBy=multi-user.target
