@@ -1,0 +1,137 @@
+---
+# Phase 5.6 — turn a bare Ubuntu 24.04 VM into a production-ready Docker host.
+# Idempotent: safe to re-run. Run with:
+#   cd ansible && ansible-playbook playbooks/setup-server.yml
+- name: Provision QR Generator Docker host
+  hosts: local
+  become: true
+
+  tasks:
+    - name: Upgrade all apt packages
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: dist
+        cache_valid_time: 3600
+
+    - name: Install base packages
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - ufw
+          - unattended-upgrades
+          - certbot
+        state: present
+
+    # ---------- Docker Engine (official apt repo) ----------
+    - name: Ensure apt keyrings directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Add Docker's official GPG key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Determine dpkg architecture
+      ansible.builtin.command: dpkg --print-architecture
+      register: dpkg_arch
+      changed_when: false
+
+    - name: Add Docker apt repository
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [arch={{ dpkg_arch.stdout }} signed-by=/etc/apt/keyrings/docker.asc]
+          https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+        filename: docker
+        state: present
+
+    - name: Install Docker Engine, CLI, and Compose plugin
+      ansible.builtin.apt:
+        name: "{{ docker_packages }}"
+        state: present
+        update_cache: true
+
+    - name: Ensure Docker is started and enabled
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: true
+
+    # ---------- deploy user ----------
+    - name: Create the deploy user (docker + sudo groups)
+      ansible.builtin.user:
+        name: "{{ deploy_user }}"
+        groups: [docker, sudo]
+        append: true
+        shell: /bin/bash
+
+    - name: Ensure deploy user's .ssh directory
+      ansible.builtin.file:
+        path: "/home/{{ deploy_user }}/.ssh"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0700"
+
+    - name: Authorize SSH key for the deploy user
+      ansible.builtin.copy:
+        content: "{{ deploy_authorized_key }}\n"
+        dest: "/home/{{ deploy_user }}/.ssh/authorized_keys"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0600"
+
+    - name: Grant the deploy user passwordless sudo (automation user)
+      ansible.builtin.copy:
+        dest: "/etc/sudoers.d/{{ deploy_user }}"
+        content: "{{ deploy_user }} ALL=(ALL) NOPASSWD:ALL\n"
+        mode: "0440"
+        validate: visudo -cf %s
+
+    # ---------- firewall (allow SSH BEFORE enabling) ----------
+    - name: Allow required ports through UFW
+      community.general.ufw:
+        rule: allow
+        port: "{{ item.port | string }}"
+        proto: "{{ item.proto }}"
+        comment: "{{ item.comment }}"
+      loop: "{{ firewall_allowed }}"
+
+    - name: Set UFW default policies
+      community.general.ufw:
+        direction: "{{ item.direction }}"
+        policy: "{{ item.policy }}"
+      loop:
+        - { direction: incoming, policy: deny }
+        - { direction: outgoing, policy: allow }
+
+    - name: Enable UFW
+      community.general.ufw:
+        state: enabled
+
+    # ---------- unattended security upgrades ----------
+    - name: Enable unattended security upgrades
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+        mode: "0644"
+
+  post_tasks:
+    - name: Collect Docker + Compose versions
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - docker --version
+        - docker compose version
+      register: versions
+      changed_when: false
+
+    - name: Report installed versions
+      ansible.builtin.debug:
+        msg: "{{ versions.results | map(attribute='stdout') | list }}"

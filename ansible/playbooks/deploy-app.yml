@@ -1,0 +1,149 @@
+---
+# Phase 5.6 — deploy the QR Generator stack to the VM by PULLING images from GHCR.
+# Secrets come from a git-ignored vars file (see ../secrets.yml.example), never from git:
+#   cd ansible && ansible-playbook playbooks/deploy-app.yml -e @../secrets.yml
+#
+# STATUS: drafted. The deploy mechanics are straightforward; the Garage CLI bootstrap
+# block is marked below and must be verified against garage v1.0.1 on the first real run
+# (it cannot be exercised until images are published to GHCR).
+- name: Deploy QR Generator
+  hosts: local
+  become: true
+  vars:
+    app_dir: /opt/qr-generator
+    image_tag: "{{ image_tag | default('latest') }}"
+    frontend_port: "{{ frontend_port | default(80) }}"
+
+  tasks:
+    - name: Assert required secrets/vars are provided
+      ansible.builtin.assert:
+        that:
+          - image_namespace is defined
+          - s3_access_key is defined
+          - s3_secret_key is defined
+          - garage_rpc_secret is defined
+          - postgres_password is defined
+        fail_msg: "Provide vars via -e @secrets.yml (see ansible/secrets.yml.example)"
+
+    - name: Create app + garage config directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0750"
+      loop:
+        - "{{ app_dir }}"
+        - "{{ app_dir }}/garage"
+
+    - name: Copy compose.yml
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../compose.yml"
+        dest: "{{ app_dir }}/compose.yml"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0640"
+
+    - name: Render garage.toml (contains rpc_secret)
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/garage.toml.j2"
+        dest: "{{ app_dir }}/garage/garage.toml"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0640"
+      no_log: true
+
+    - name: Render .env (secrets; mode 0600)
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/env.j2"
+        dest: "{{ app_dir }}/.env"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0600"
+      no_log: true
+
+    - name: Log in to GHCR
+      ansible.builtin.command:
+        cmd: docker login ghcr.io -u {{ ghcr_username }} --password-stdin
+        stdin: "{{ ghcr_token }}"
+      changed_when: false
+      no_log: true
+
+    - name: Pull images
+      ansible.builtin.command:
+        cmd: docker compose pull
+        chdir: "{{ app_dir }}"
+
+    - name: Start the stack
+      ansible.builtin.command:
+        cmd: docker compose up -d
+        chdir: "{{ app_dir }}"
+
+    # ---------- Garage bootstrap (idempotent) — VERIFY CLI FLAGS on first run ----------
+    - name: Wait for Garage to respond
+      ansible.builtin.command:
+        cmd: docker compose exec -T garage /garage status
+        chdir: "{{ app_dir }}"
+      register: garage_status
+      retries: 10
+      delay: 6
+      until: garage_status.rc == 0
+      changed_when: false
+
+    - name: Assign + apply layout on first run (node has no role yet)
+      ansible.builtin.shell: |
+        set -euo pipefail
+        NODE_ID=$(docker compose exec -T garage /garage status | awk '/NO ROLE ASSIGNED/{print $1; exit}')
+        docker compose exec -T garage /garage layout assign -z dc1 -c 1G "$NODE_ID"
+        docker compose exec -T garage /garage layout apply --version 1
+      args:
+        chdir: "{{ app_dir }}"
+      when: "'NO ROLE ASSIGNED' in garage_status.stdout"
+
+    - name: List existing Garage keys
+      ansible.builtin.command:
+        cmd: docker compose exec -T garage /garage key list
+        chdir: "{{ app_dir }}"
+      register: garage_keys
+      changed_when: false
+
+    - name: Import the app's S3 key so it matches the app .env
+      ansible.builtin.command:
+        cmd: docker compose exec -T garage /garage key import --yes -n qr-app-key {{ s3_access_key }} {{ s3_secret_key }}
+        chdir: "{{ app_dir }}"
+      when: s3_access_key not in garage_keys.stdout
+      no_log: true
+
+    - name: List existing buckets
+      ansible.builtin.command:
+        cmd: docker compose exec -T garage /garage bucket list
+        chdir: "{{ app_dir }}"
+      register: garage_buckets
+      changed_when: false
+
+    - name: Create the qr-codes bucket on first run
+      ansible.builtin.command:
+        cmd: docker compose exec -T garage /garage bucket create qr-codes
+        chdir: "{{ app_dir }}"
+      when: "'qr-codes' not in garage_buckets.stdout"
+
+    - name: Grant the key read/write on the bucket
+      ansible.builtin.command:
+        cmd: docker compose exec -T garage /garage bucket allow --read --write qr-codes --key qr-app-key
+        chdir: "{{ app_dir }}"
+      changed_when: false
+
+    - name: Restart backend so it picks up the ready bucket
+      ansible.builtin.command:
+        cmd: docker compose restart backend
+        chdir: "{{ app_dir }}"
+
+  post_tasks:
+    - name: Health check via the frontend
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}:{{ frontend_port }}/health"
+        status_code: 200
+      register: health
+      retries: 12
+      delay: 5
+      until: health.status == 200

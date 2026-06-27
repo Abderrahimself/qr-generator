@@ -1,0 +1,7 @@
+# Phase 5.6 — local environment: the Terraform/libvirt VM (Phase 5.5).
+# ansible_host is the Terraform output `vm_ip`. If the VM is recreated, update it
+# (or wire to: terraform -chdir=../terraform/environments/local output -raw vm_ip).
+local:
+  hosts:
+    qr-server:
+      ansible_host: 192.168.60.2

@@ -1,0 +1,20 @@
+# Connection (initial cloud-image user; the deploy user is created by setup-server.yml)
+ansible_user: ubuntu
+ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+
+# Provisioning
+deploy_user: deploy
+# Public key authorized for the deploy user, read from the control node.
+deploy_authorized_key: "{{ lookup('file', lookup('env', 'HOME') + '/.ssh/id_ed25519.pub') }}"
+
+firewall_allowed:
+  - { port: 22, proto: tcp, comment: SSH }
+  - { port: 80, proto: tcp, comment: HTTP }
+  - { port: 443, proto: tcp, comment: HTTPS }
+
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin

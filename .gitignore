@@ -1,6 +1,26 @@
-# Environment and secrets
+# Environment and secrets — NEVER commit (this repo is public)
 .env
+.env.*
+!.env.example
 garage/garage.toml
+ansible/secrets.yml
+ansible/**/vault.yml
+ansible/**/*.vault
+
+# Credentials / private keys / certs
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+*_rsa
+*_ed25519
+.pgpass
+*.retry
+vault-password*
+.vault_pass*
+
 # Supervisor / planning docs — local guidance, kept out of the repo
 CLAUDE.md
 APPLICATION_STATE.md
