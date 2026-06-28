@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -37,5 +37,5 @@ def sample_qr_code() -> QRCode:
         size_bytes=1498,
     )
     qr.id = uuid.uuid4()
-    qr.created_at = datetime.now(timezone.utc)
+    qr.created_at = datetime.now(UTC)
     return qr

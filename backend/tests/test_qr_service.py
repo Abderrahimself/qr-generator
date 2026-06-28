@@ -30,6 +30,7 @@ class TestGenerate:
         mock_cache.get.assert_awaited_once_with(url_hash)
         mock_metadata.get_by_id.assert_awaited_once_with(sample_qr_code.id)
         mock_storage.upload.assert_not_awaited()
+        assert result.id == sample_qr_code.id
 
     @pytest.mark.asyncio
     async def test_cache_miss_generates_and_stores(
@@ -67,7 +68,6 @@ class TestGenerate:
         self, service: QRService, mock_cache: AsyncMock, mock_metadata: AsyncMock, mock_storage: AsyncMock, sample_qr_code: QRCode
     ) -> None:
         url = "https://example.com/"
-        url_hash = hashlib.sha256(url.encode()).hexdigest()
 
         mock_cache.get.return_value = str(sample_qr_code.id)
         mock_metadata.get_by_id.return_value = None  # stale cache
@@ -78,6 +78,7 @@ class TestGenerate:
 
         mock_storage.upload.assert_awaited_once()
         mock_metadata.save.assert_awaited_once()
+        assert result.id == sample_qr_code.id
 
 
 class TestListHistory:

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -17,7 +17,7 @@ def _make_response(**overrides) -> QRCodeResponse:
         "url": "https://example.com/",
         "image_url": "https://presigned.url/qr.png",
         "format": "png",
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
     }
     defaults.update(overrides)
     return QRCodeResponse(**defaults)

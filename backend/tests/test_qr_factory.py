@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.qr_factory import QRFormatFactory, PNGGenerator, SVGGenerator
+from app.services.qr_factory import PNGGenerator, QRFormatFactory, SVGGenerator
 
 
 class TestQRFormatFactory:

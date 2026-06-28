@@ -1,6 +1,7 @@
 from uuid import UUID
 
-from sqlalchemy import select, delete as sa_delete
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.qr_code import QRCode
@@ -40,4 +41,4 @@ class PostgresMetadataRepository(MetadataRepository):
             sa_delete(QRCode).where(QRCode.id == id)
         )
         await self.session.commit()
-        return result.rowcount > 0
+        return result.rowcount > 0  # type: ignore[attr-defined]  # CursorResult has rowcount
