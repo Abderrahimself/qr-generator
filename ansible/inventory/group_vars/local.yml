@@ -11,6 +11,9 @@ firewall_allowed:
   - { port: 22, proto: tcp, comment: SSH }
   - { port: 80, proto: tcp, comment: HTTP }
   - { port: 443, proto: tcp, comment: HTTPS }
+  # Garage S3 API: the browser fetches QR images via presigned URLs pointing at
+  # S3_PUBLIC_URL (http://<vm>:3900), so this port must be reachable from clients.
+  - { port: 3900, proto: tcp, comment: Garage S3 (presigned image URLs) }
 
 docker_packages:
   - docker-ce

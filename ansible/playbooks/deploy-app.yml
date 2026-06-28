@@ -1,11 +1,11 @@
 ---
 # Phase 5.6 — deploy the QR Generator stack to the VM by PULLING images from GHCR.
 # Secrets come from a git-ignored vars file (see ../secrets.yml.example), never from git:
-#   cd ansible && ansible-playbook playbooks/deploy-app.yml -e @../secrets.yml
+#   cd ansible && ansible-playbook -i inventory/local.yml playbooks/deploy-app.yml -e @secrets.yml
 #
-# STATUS: drafted. The deploy mechanics are straightforward; the Garage CLI bootstrap
-# block is marked below and must be verified against garage v1.0.1 on the first real run
-# (it cannot be exercised until images are published to GHCR).
+# STATUS: Garage CLI bootstrap verified against garage v1.0.1 on 2026-06-28 (status
+# output format, node-id parse, key import / bucket create / bucket allow all confirmed
+# with realistic generated GK-format credentials).
 - name: Deploy QR Generator
   hosts: local
   become: true
@@ -62,12 +62,18 @@
         mode: "0600"
       no_log: true
 
-    - name: Log in to GHCR
+    - name: Log in to GHCR (only needed for private images)
       ansible.builtin.command:
         cmd: docker login ghcr.io -u {{ ghcr_username }} --password-stdin
         stdin: "{{ ghcr_token }}"
       changed_when: false
       no_log: true
+      # The published images are public, so a token is optional. Skip login unless a
+      # real token is supplied (placeholder from secrets.yml.example does not count).
+      when:
+        - ghcr_token is defined
+        - ghcr_token | length > 0
+        - ghcr_token != "REPLACE_WITH_TOKEN"
 
     - name: Pull images
       ansible.builtin.command:
@@ -79,7 +85,7 @@
         cmd: docker compose up -d
         chdir: "{{ app_dir }}"
 
-    # ---------- Garage bootstrap (idempotent) — VERIFY CLI FLAGS on first run ----------
+    # ---------- Garage bootstrap (idempotent) — CLI flags verified vs v1.0.1 ----------
     - name: Wait for Garage to respond
       ansible.builtin.command:
         cmd: docker compose exec -T garage /garage status
@@ -98,6 +104,7 @@
         docker compose exec -T garage /garage layout apply --version 1
       args:
         chdir: "{{ app_dir }}"
+        executable: /bin/bash   # pipefail is a bashism; Ubuntu /bin/sh is dash
       when: "'NO ROLE ASSIGNED' in garage_status.stdout"
 
     - name: List existing Garage keys
