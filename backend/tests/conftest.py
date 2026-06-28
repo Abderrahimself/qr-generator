@@ -1,6 +1,15 @@
+import os
 import uuid
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
+
+# Settings() runs at import time and requires these vars (no defaults). CI has no
+# .env file (it's git-ignored), so seed throwaway values before importing the app.
+# setdefault means a real .env / real env vars still win for local runs.
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost:5432/test")
+os.environ.setdefault("S3_ENDPOINT_URL", "http://localhost:3900")
+os.environ.setdefault("S3_ACCESS_KEY", "test")
+os.environ.setdefault("S3_SECRET_KEY", "test")
 
 import pytest
 
