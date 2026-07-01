@@ -37,8 +37,10 @@ services:
     image: docker.io/dxflrs/garage:v1.0.1
     restart: unless-stopped
     ports:
-      - "3900:3900"   # S3 API (browser presigned URLs + host Garage CLI)
-      - "3902:3902"   # Admin API
+      # Host ports are parameterised so a second (staging) stack can publish on
+      # different ports. Defaults preserve the production values.
+      - "${GARAGE_S3_PORT:-3900}:3900"      # S3 API (browser presigned URLs + host Garage CLI)
+      - "${GARAGE_ADMIN_PORT:-3902}:3902"   # Admin API
     volumes:
       - ./garage/garage.toml:/etc/garage.toml:ro,z
       - garagedata:/var/lib/garage/data

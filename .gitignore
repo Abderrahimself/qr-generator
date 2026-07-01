@@ -4,6 +4,7 @@
 !.env.example
 garage/garage.toml
 ansible/secrets.yml
+ansible/secrets.*.yml
 ansible/**/vault.yml
 ansible/**/*.vault
 

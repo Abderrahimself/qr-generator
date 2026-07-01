@@ -10,9 +10,17 @@
   hosts: local
   become: true
   vars:
-    app_dir: /opt/qr-generator
+    # Environment selector. Deploy prod with no extra var; deploy staging with
+    #   -e env_name=staging -e @secrets.staging.yml
+    env_name: "{{ env_name | default('prod') }}"
+    # Prod keeps its original paths/ports/project so it is never disturbed; any
+    # other environment gets an isolated dir, project name and default ports.
+    app_dir: "{{ '/opt/qr-generator' if env_name == 'prod' else '/opt/qr-generator-' + env_name }}"
+    compose_project: "{{ 'qr-generator' if env_name == 'prod' else 'qr-' + env_name }}"
     image_tag: "{{ image_tag | default('latest') }}"
     frontend_port: "{{ frontend_port | default(80) }}"
+    garage_s3_port: "{{ garage_s3_port | default(3900) }}"
+    garage_admin_port: "{{ garage_admin_port | default(3902) }}"
 
   tasks:
     - name: Assert required secrets/vars are provided
