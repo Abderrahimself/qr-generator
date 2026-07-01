@@ -1,0 +1,90 @@
+# compose.monitoring.yml — Phase 5.8 observability stack (project: qr-monitoring)
+#
+# Deploy:  docker compose -f compose.monitoring.yml up -d      (COMPOSE_PROJECT_NAME=qr-monitoring via .env)
+# One monitoring stack observes the whole VM:
+#   - node-exporter + cadvisor are host-global (cover prod AND staging)
+#   - prometheus scrapes each backend's /metrics over that stack's network
+#
+# Rollout: prometheus first joins ONLY qr-staging_default (staging-first). To add
+# production, uncomment qr-generator_default below + its network on the prometheus
+# service, and the production target in prometheus/prometheus.yml.
+
+services:
+  prometheus:
+    image: docker.io/prom/prometheus:v3.1.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle          # allows POST /-/reload without a restart
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro,z
+      - ./prometheus/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro,z
+      - promdata:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - monitoring
+      - qr-staging_default              # reach qr-staging-backend-1:8000
+      # - qr-generator_default          # enable for the production backend
+
+  node-exporter:
+    image: docker.io/prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    pid: host
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro,rslave
+    networks:
+      - monitoring
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.55.1
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - monitoring
+
+  grafana:
+    image: docker.io/grafana/grafana:11.5.1
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro,z
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro,z
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - monitoring
+
+networks:
+  monitoring:
+  qr-staging_default:
+    external: true
+  # qr-generator_default:
+  #   external: true
+
+volumes:
+  promdata:
+  grafanadata:

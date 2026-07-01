@@ -17,6 +17,9 @@ firewall_allowed:
   # Staging stack (second compose project on the same VM): frontend + Garage S3.
   - { port: 8080, proto: tcp, comment: Staging frontend }
   - { port: 3910, proto: tcp, comment: Staging Garage S3 (presigned image URLs) }
+  # Monitoring stack (Phase 5.8): Grafana dashboards + Prometheus UI.
+  - { port: 3000, proto: tcp, comment: Grafana }
+  - { port: 9090, proto: tcp, comment: Prometheus }
 
 docker_packages:
   - docker-ce

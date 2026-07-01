@@ -1,0 +1,63 @@
+# Alert rules for the QR Generator (Phase 5.8).
+# Thresholds match DEVOPS.md. Labels/annotations use $labels.env so a firing alert
+# names the environment (staging / production).
+groups:
+  - name: qr-app
+    rules:
+      - alert: AppDown
+        expr: up{job="qr-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "QR backend down ({{ $labels.env }})"
+          description: "Backend target {{ $labels.instance }} ({{ $labels.env }}) has been unreachable for over 1 minute."
+
+      - alert: HighErrorRate
+        # 5xx ratio over 10% for 2 minutes. status is grouped by the instrumentator
+        # into 2xx/4xx/5xx, so match status="5xx" (not a regex on raw codes).
+        expr: |
+          sum by (env) (rate(http_requests_total{status="5xx"}[5m]))
+            / sum by (env) (rate(http_requests_total[5m])) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 5xx error rate ({{ $labels.env }})"
+          description: "5xx responses are over 10% of traffic for 2 minutes in {{ $labels.env }}."
+
+      - alert: HighLatency
+        # P95 request latency over 2s for 2 minutes (highr histogram = accurate percentiles).
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, env) (rate(http_request_duration_highr_seconds_bucket[5m]))) > 2
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High P95 latency ({{ $labels.env }})"
+          description: "P95 request latency is above 2s for 2 minutes in {{ $labels.env }}."
+
+  - name: qr-host
+    rules:
+      - alert: DiskSpaceLow
+        # Less than 15% free on any real (non-virtual) filesystem.
+        expr: |
+          node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs"}
+            / node_filesystem_size_bytes{fstype=~"ext4|xfs|btrfs"} < 0.15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space on {{ $labels.mountpoint }}"
+          description: "Less than 15% free on {{ $labels.mountpoint }} for 5 minutes."
+
+      - alert: HighCPU
+        # Host CPU utilisation over 90% for 5 minutes.
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU on {{ $labels.instance }}"
+          description: "Host CPU utilisation is above 90% for 5 minutes."
